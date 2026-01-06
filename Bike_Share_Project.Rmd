@@ -1,0 +1,325 @@
+---
+title: "How Does a Bike-Share Navigate Speedy Success"
+author: "Okyere Adubofuor"
+date: "2026-01-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Install and load the tools for the project by install the tidyverse package
+
+```{r loading tidyverse}
+library(tidyverse)
+```
+
+
+```{r installing readr to imports .csv files}
+library(readr)
+```
+
+# Implement the appropriate conflicts resolution
+```{r}
+library(conflicted)
+
+conflicts_prefer(dplyr::filter)
+```
+
+
+#----------------------------------------------------------------
+# STEP 1: GATHER THE DATA FOR THE PROJECT AND ASSIGN TO VARIABLES
+#----------------------------------------------------------------
+## Upload divvy data
+```{r}
+q1_19 <- read_csv("Data/Divvy_Trips_2019_Q1.csv")
+q1_20 <- read_csv("Data/Divvy_Trips_2020_Q1.csv")
+```
+
+
+# -----------------------------------------------------------------
+# STEP 2: COMPARE AND MATCH COLUMNS NAMES AND THEN COMBINE THE DATA
+# -----------------------------------------------------------------
+## have a general view of the data
+```{r}
+View(q1_19)
+View(q1_20)
+```
+
+
+## Inspect the structure of the data for column names and their type
+```{r}
+str(q1_19)
+str(q1_20)
+```
+
+
+## check the column names
+```{r}
+colnames(q1_19)
+colnames(q1_20)
+```
+
+
+## Match column names by changing some to the chosen names
+### change some column names in q1_19 to the appropriate names in q1_20
+```{r}
+q1_19 <- q1_19 %>%
+  rename(
+    start_station_id = from_station_id,
+    start_station_name = from_station_name,
+    end_station_id = to_station_id,
+    end_station_name = to_station_name
+  )
+```
+
+
+### change some column names in q1_20 to the appropriate names in q1_19
+```{r}
+q1_20 <- q1_20 %>% 
+  rename(
+    trip_id = ride_id,
+    start_time = started_at,
+    end_time = ended_at,
+    bike_id = rideable_type,
+    usertype = member_casual
+  )
+```
+
+
+## Inspect the data frames after the changes
+```{r}
+View(q1_19)
+View(q1_20)
+```
+
+
+## Create "tripduration" column in q1_20 to match the column in q1_19
+### Load the lubridate to use the datetime values directly
+```{r loading lubridate}
+library(lubridate)
+```
+
+
+### calculate the values for the "tripduration" column
+```{r}
+q1_20 <- mutate(q1_20,
+    end_time = ymd_hms(end_time),
+    start_time = ymd_hms(start_time),
+    tripduration = as.numeric(difftime(end_time, start_time, units = "secs"))
+)
+
+View(q1_20)
+```
+
+
+## Set trip_id in q1_19 to character to match the trip_id in q1_20
+```{r}
+q1_19 <- mutate(q1_19, trip_id = as.character(trip_id))
+```
+
+
+## Inspect the dataframes for discrepancies in column names and types
+```{r}
+str(q1_19)
+str(q1_20)
+```
+
+
+## Select the relevant columns for each dataframe before combining them
+```{r}
+q1_19_select <- q1_19 %>% 
+  select(trip_id, usertype, tripduration, start_station_id, start_station_name,
+         end_station_id, end_station_name, start_time)
+
+q1_20_select <- q1_20 %>% 
+  select(trip_id, usertype, tripduration, start_station_id, start_station_name,
+         end_station_id, end_station_name, start_time) %>% 
+  mutate(start_time = as.character(start_time))
+```
+
+
+## Inspect the dataframes for discrepancies in column names and types
+```{r}
+str(q1_19_select)
+View(q1_19_select)
+str(q1_20_select)
+View(q1_20_select)
+```
+
+
+## Combine the two dataframes into one dataframes
+```{r}
+all_trips <- bind_rows(q1_19_select, q1_20_select)
+```
+
+
+## Inspect the combined dataframe as you prepare for Analysis
+```{r}
+str(all_trips)
+```
+
+
+# -----------------------------------------------------
+# STEP 3: CLEAN UP AND ADD DATA TO PREPARE FOR ANALYSIS
+# -----------------------------------------------------
+## Inspect the combined dataframe that has been created
+```{r}
+colnames(all_trips) # Lists all column names
+nrow(all_trips) # Displays the number of rows
+dim(all_trips) # Shows the dimension of the dataframe
+head(all_trips) # Displays first 6 rows of the dataframe
+str(all_trips) # Shows the column names and data types
+summary(all_trips) #Statistical summary of data
+```
+
+
+### The usertype columnn shows 4 values representing only 2 categories, therefore they must be made to conform to only 2
+### This situation arose because the 2 dataframes had different labels for the 2 categories of users
+## Inspect the data to know the number of values for each label
+```{r}
+table(all_trips$usertype)
+```
+
+
+## Reassign the values to the desired values
+```{r}
+all_trips <- all_trips %>% 
+  mutate(usertype = recode(usertype,
+    "Subscriber" = "member", "Customer" = "casual"))
+```
+
+
+# List the number of observations for each category to see that the correct changes were made
+```{r}
+table(all_trips$usertype)
+```
+
+
+## Extract day, month, and year from the start_time column and create columns for them
+### This will allow us to aggregate ride data for day, month, and year
+## First convert the start_time column to date format
+### Since the date are in different datetime formats, parse them using parse_date_time before casting to type date
+```{r}
+all_trips$start_time <- parse_date_time(all_trips$start_time,
+                                        orders = c("dmy HM", "ymd HMS"))
+all_trips$start_time <- as.Date(all_trips$start_time)
+```
+
+
+## Extract year, month, and day from start_time and create columns for them
+```{r}
+all_trips <- all_trips %>% 
+  mutate(
+    year = year(start_time),
+    month = month(start_time, label = TRUE, abbr = FALSE),
+    day = day(start_time),
+    day_of_week = wday(start_time, label = TRUE, abbr = FALSE, week_start = 1)
+  )
+```
+
+
+## Remove bad data such as when tripduration is negative or when the ride was initiated by the company
+### Sometimes the bikes are undocked by the company to check quality issues.
+### This is done at the HQ so remove all data with "HQ QR" as start_station_name
+```{r}
+all_trips_v2 <- all_trips[!(all_trips$start_station_name == "HQ QR"
+                            | all_trips$tripduration < 0),]
+```
+
+
+# ------------------------------------
+# STEP 4: CONDUCT DESCRIPTIVE ANALYSIS
+# ------------------------------------
+## Descriptive analysis on tripduration.
+```{r}
+tripduration_summary <- summary(all_trips_v2$tripduration)
+```
+
+
+## Compare members and casual users
+```{r}
+members_vs_casual_summary <- aggregate(all_trips_v2$tripduration ~ all_trips_v2$usertype, FUN = summary)
+```
+
+
+## See the average tripduration for members and casual users on each day of the week
+```{r}
+members_vs_casual_dotw <- aggregate(all_trips_v2$tripduration ~ all_trips_v2$usertype + all_trips_v2$day_of_week, FUN = mean)
+```
+
+
+## Fix the other of values in the day_of_week column
+```{r}
+all_trips_v2$day_of_week <- ordered(all_trips_v2$day_of_week, levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+```
+
+
+## Compare the number of rides and average tripduration on each day for members and casual users
+```{r}
+members_vs_casual_num_of_rides_vs_duration <- all_trips_v2 %>% 
+  group_by(usertype, day_of_week) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = mean(tripduration)) %>% 
+  arrange(usertype, day_of_week)
+```
+
+
+## Let's visualize the number of rides by rider type
+```{r}
+all_trips_v2 %>% 
+  group_by(usertype, day_of_week) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = mean(tripduration)) %>% 
+  arrange(usertype, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Day of the Week",
+    y = "Number of Rides",
+    fill = "User Type"
+  ) +
+  labs(
+    title = "Cyclistic Bikes Daily Usage",
+    subtitle = "A comparison of number of rides for members and casual riders", 
+    caption = "Cyclistic bike trip data for 2019 and 2020") +
+theme(
+  axis.text.x = element_text(angle = 45, hjust = 1)
+)
+
+## Let's create a visualization for average tripduration
+all_trips_v2 %>% 
+  group_by(usertype, day_of_week) %>% 
+  summarise(number_of_rides = n(),
+            average_duration = mean(tripduration)) %>% 
+  arrange(usertype, day_of_week) %>% 
+  ggplot(aes(x = day_of_week, y = average_duration, fill = usertype)) +
+  geom_col(position = "dodge") +
+  labs(
+    x = "Day of the Week",
+    y = "Average Trip Duration",
+    fill = "User Type"
+  ) +
+  labs(
+    title = "Cyclistic Bikes Daily Usage",
+    subtitle = "A comparison of average biketrip duration for members and casual riders",
+    caption = "Cyclistic bike trip data for 2019 and 2020") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+
+
+# ------------------------------------------------
+# STEP 5: EXPORT SUMMARY FILE FOR FURTHER ANALYSIS
+# ------------------------------------------------
+```{r}
+write.csv(all_trips_v2, "C:/Users/Okyere Adubofuor/Documents/Data_Analysis/Capstone/csv from R/all_trips.csv", row.names = FALSE)
+
+write.csv(members_vs_casual_num_of_rides_vs_duration, "C:/Users/Okyere Adubofuor/Documents/Data_Analysis/Capstone/csv from R/num_of_ride_avg_tripduration.csv", row.names = FALSE)
+
+write.csv(members_vs_casual_summary, "C:/Users/Okyere Adubofuor/Documents/Data_Analysis/Capstone/csv from R/summary.csv", row.names = FALSE)
+```
+
