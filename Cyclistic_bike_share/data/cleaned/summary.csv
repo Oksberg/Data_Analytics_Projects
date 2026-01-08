@@ -1,0 +1,3 @@
+"all_trips_v2$usertype","all_trips_v2$tripduration.Min.","all_trips_v2$tripduration.1st Qu.","all_trips_v2$tripduration.Median","all_trips_v2$tripduration.Mean","all_trips_v2$tripduration.3rd Qu.","all_trips_v2$tripduration.Max."
+"casual",      2.0000,    652.0000,   1176.0000,   8223.3490,   2025.5000,9387024.0000
+"member",      2.0000,    313.0000,    498.0000,    714.5588,    797.0000,2253331.0000
